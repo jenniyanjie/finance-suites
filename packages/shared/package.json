@@ -1,0 +1,31 @@
+{
+  "name": "@finance-suites/shared",
+  "version": "1.0.0",
+  "description": "共享的金融计算逻辑和类型定义",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:ui": "vitest --ui",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.4.5",
+    "typescript": "^5.1.6",
+    "vitest": "^0.34.1"
+  },
+  "keywords": [
+    "finance",
+    "calculator",
+    "math",
+    "compound-interest",
+    "cagr",
+    "investment"
+  ]
+}
