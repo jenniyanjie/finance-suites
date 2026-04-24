@@ -13,6 +13,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Calculator, BarChart3, Share2 } from "lucide-react";
 import { calculateFutureValue, calculatePrincipal, calculateInterestRate } from "@finance-suites/shared";
 import type { FVInput, FVResult } from "@finance-suites/shared";
+import { useCalculationHistory } from "@/lib/useCalculationHistory";
+import HistoryPanel from "@/components/ui/HistoryPanel";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 // 表单验证模式
 const formSchema = z.object({
@@ -28,6 +40,8 @@ export default function CompoundInterestCalculator() {
   const [result, setResult] = useState<FVResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [calculationMode, setCalculationMode] = useState<"fv" | "principal" | "rate">("fv");
+
+  const { history, addRecord, removeRecord, clearHistory } = useCalculationHistory<FVResult>('compound');
 
   const {
     register,
@@ -51,6 +65,23 @@ export default function CompoundInterestCalculator() {
   const n = watch("n");
   const mode = watch("mode");
 
+  // 生成逐年增长图表数据
+  const chartData = (() => {
+    if (!P || r === undefined || !n) return [];
+    const years = Math.min(Math.ceil(n), 50);
+    const rDecimal = r / 100;
+    return Array.from({ length: years + 1 }, (_, i) => {
+      const compound = P * Math.pow(1 + rDecimal, i);
+      const simple = P * (1 + rDecimal * i);
+      return {
+        year: i,
+        复利: Math.round(compound * 100) / 100,
+        单利: Math.round(simple * 100) / 100,
+        本金: P,
+      };
+    });
+  })();
+
   // 实时计算功能
   useEffect(() => {
     if (P && r !== undefined && n && mode) {
@@ -73,6 +104,20 @@ export default function CompoundInterestCalculator() {
       }
     }
   }, [P, r, n, mode, calculationMode]);
+
+  // 防抖保存历史（用户停止输入1秒后才记录）
+  useEffect(() => {
+    if (calculationMode !== "fv" || !result) return;
+    const timer = setTimeout(() => {
+      addRecord({
+        inputSummary: `本金¥${P}，年化${r}%，${n}年（${mode === "compound" ? "复利" : "单利"}）`,
+        resultSummary: `终值 ¥${result.FV.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}，利润 ¥${result.profit.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`,
+        inputs: { P, r, n, mode },
+        result,
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [P, r, n, mode, result, calculationMode]);
 
   const onSubmit = (data: FormData) => {
     setError(null);
@@ -127,6 +172,15 @@ export default function CompoundInterestCalculator() {
     reset();
     setResult(null);
     setError(null);
+  };
+
+  const handleSelectHistory = (record: import("@/lib/useCalculationHistory").HistoryRecord<FVResult>) => {
+    const inputs = record.inputs as { P: number; r: number; n: number; mode: "simple" | "compound" };
+    setValue("P", inputs.P);
+    setValue("r", inputs.r);
+    setValue("n", inputs.n);
+    setValue("mode", inputs.mode);
+    setCalculationMode("fv");
   };
 
   return (
@@ -270,7 +324,7 @@ export default function CompoundInterestCalculator() {
                       <div>本金: ¥{P?.toLocaleString("zh-CN")}</div>
                       <div>年收益率: {r}%</div>
                       <div>投资年限: {n}年</div>
-                      <div>收益倍数: {(result.FV / P).toFixed(2)}倍</div>
+                      <div>收益倍数: {P ? (result.FV / P).toFixed(2) : '–'}倍</div>
                     </div>
                   </div>
 
@@ -290,7 +344,82 @@ export default function CompoundInterestCalculator() {
             </CardContent>
           </Card>
         </div>
+
+        {/* 增长曲线图 */}
+        {chartData.length > 1 && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                复利 vs 单利增长曲线
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorCompound" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorSimple" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis
+                    dataKey="year"
+                    tickFormatter={(v) => `${v}年`}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis
+                    tickFormatter={(v) =>
+                      v >= 1000000
+                        ? `${(v / 1000000).toFixed(1)}M`
+                        : v >= 1000
+                        ? `${(v / 1000).toFixed(0)}K`
+                        : v.toFixed(0)
+                    }
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => [
+                      `¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`,
+                      name,
+                    ]}
+                    labelFormatter={(label) => `第 ${label} 年`}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="复利"
+                    stroke="#22c55e"
+                    fill="url(#colorCompound)"
+                    strokeWidth={2}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="单利"
+                    stroke="#3b82f6"
+                    fill="url(#colorSimple)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
       </Tabs>
+
+      {/* 计算历史 */}
+      <HistoryPanel
+        history={history}
+        onClear={clearHistory}
+        onRemove={removeRecord}
+        onSelect={handleSelectHistory}
+        title="复利计算历史"
+      />
     </div>
   );
 }

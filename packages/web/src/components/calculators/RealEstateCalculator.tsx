@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Home, BarChart3, Share2, Target, TrendingUp } from "lucide-react";
 import { calculateRealEstateReturn, calculateRequiredAppreciation, batchCompareRealestate } from "@finance-suites/shared";
 import type { RealEstateInput, RealEstateResult } from "@finance-suites/shared";
+import { useCalculationHistory } from "@/lib/useCalculationHistory";
+import HistoryPanel from "@/components/ui/HistoryPanel";
 
 // 表单验证模式
 const realEstateSchema = z.object({
@@ -39,6 +41,8 @@ export default function RealEstateCalculator() {
   const [compareResults, setCompareResults] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [calculationMode, setCalculationMode] = useState<"basic" | "target" | "compare">("basic");
+
+  const { history, addRecord, removeRecord, clearHistory } = useCalculationHistory<RealEstateResult>('realestate');
 
   const basicForm = useForm<RealEstateFormData>({
     resolver: zodResolver(realEstateSchema),
@@ -97,6 +101,30 @@ export default function RealEstateCalculator() {
       }
     }
   }, [basicPropertyPrice, basicLeverageRatio, basicLoanRate, basicRentYield, basicPriceGrowth, calculationMode]);
+
+  // 防抖保存历史（仅基础模式）
+  useEffect(() => {
+    if (calculationMode !== "basic" || !result) return;
+    const timer = setTimeout(() => {
+      addRecord({
+        inputSummary: `总价${basicPropertyPrice}万，杠杆${(basicLeverageRatio * 100).toFixed(0)}%，利率${basicLoanRate}%`,
+        resultSummary: `年ROE ${result.roe >= 0 ? "+" : ""}${result.roe.toFixed(2)}%，年利润${result.totalProfit.toFixed(1)}万`,
+        inputs: { propertyPrice: basicPropertyPrice, leverageRatio: basicLeverageRatio, loanRate: basicLoanRate, rentYield: basicRentYield, priceGrowth: basicPriceGrowth },
+        result,
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [basicPropertyPrice, basicLeverageRatio, basicLoanRate, basicRentYield, basicPriceGrowth, result, calculationMode]);
+
+  const handleSelectHistory = (record: import("@/lib/useCalculationHistory").HistoryRecord<RealEstateResult>) => {
+    const i = record.inputs as { propertyPrice: number; leverageRatio: number; loanRate: number; rentYield: number; priceGrowth: number };
+    basicForm.setValue("propertyPrice", i.propertyPrice);
+    basicForm.setValue("leverageRatio", i.leverageRatio);
+    basicForm.setValue("loanRate", i.loanRate);
+    basicForm.setValue("rentYield", i.rentYield);
+    basicForm.setValue("priceGrowth", i.priceGrowth);
+    setCalculationMode("basic");
+  };
 
   // 实时计算所需房价涨幅
   useEffect(() => {
@@ -482,6 +510,15 @@ export default function RealEstateCalculator() {
           </TabsContent>
         </div>
       </Tabs>
+
+      {/* 计算历史 */}
+      <HistoryPanel
+        history={history}
+        onClear={clearHistory}
+        onRemove={removeRecord}
+        onSelect={handleSelectHistory}
+        title="房产投资历史"
+      />
     </div>
   );
 }

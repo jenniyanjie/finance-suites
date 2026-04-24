@@ -8,6 +8,12 @@ export * from './types';
 export * from './math/compound-interest';
 export * from './math/cagr';
 export * from './math/real-estate';
+export * from './math/trading-cost';
+export * from './math/kelly';
+export * from './math/mortgage';
+export * from './math/valuation';
+export * from './math/options';
+export * from './math/dca';
 // 导出工具函数
 export * from './utils/validation';
 // 版本信息

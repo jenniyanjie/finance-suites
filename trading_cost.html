@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IBKR 港股交易费用与净收益计算器</title>
+  <style>
+    :root {
+      --bg: #0f172a;          /* slate-900 */
+      --panel: #111827;       /* gray-900 */
+      --muted: #94a3b8;       /* slate-400 */
+      --text: #e5e7eb;        /* gray-200 */
+      --accent: #22c55e;      /* green-500 */
+      --accent-2: #60a5fa;    /* blue-400 */
+      --danger: #fb7185;      /* rose-400 */
+      --border: #1f2937;      /* gray-800 */
+    }
+    * { box-sizing: border-box; }
+    body{
+      margin:0; padding:24px; font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; 
+      background: radial-gradient(1200px 600px at 20% -10%, #1f2937 0%, var(--bg) 60%);
+      color: var(--text);
+    }
+    .container{ max-width: 1000px; margin: 0 auto; }
+    .card{
+      background: linear-gradient(180deg, #0b1022 0%, #0a0f1c 100%);
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    h1{ font-size: 24px; margin: 0 0 6px; letter-spacing: .3px; }
+    .sub{ color: var(--muted); margin-bottom: 18px; font-size: 14px; }
+    .grid{ display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+    .col-6{ grid-column: span 6; }
+    .col-4{ grid-column: span 4; }
+    .col-12{ grid-column: span 12; }
+    label{ display:block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    input, select{
+      width: 100%; padding: 10px 12px; border-radius: 10px; outline: none; border: 1px solid var(--border);
+      background: #0b1222; color: var(--text);
+    }
+    input[type="number"]{ appearance: textfield; }
+    .row{ display:flex; gap:10px; align-items:center; }
+    .btn{
+      padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer;
+      background: #0c162a; color: var(--text); transition: .2s ease; font-weight:600;
+    }
+    .btn:hover{ transform: translateY(-1px); }
+    .btn-primary{ background: linear-gradient(90deg, #22c55e 0%, #60a5fa 100%); color:#05101b; border-color: transparent; }
+    .btn-ghost{ background: transparent; }
+    table{ width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td{ text-align: right; padding: 10px 8px; border-bottom: 1px dashed var(--border); }
+    th:first-child, td:first-child{ text-align: left; }
+    tfoot td{ font-weight: 700; }
+    .pill{ display:inline-block; padding:2px 8px; border-radius:999px; background:#0d1b31; color:var(--accent-2); font-size:12px; }
+    .muted{ color: var(--muted); }
+    .kpi{
+      display:grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 16px;
+    }
+    .kpi .box{ background:#0b1222; border:1px solid var(--border); border-radius:12px; padding:14px; }
+    .kpi .label{ color:var(--muted); font-size:12px; margin-bottom:6px; }
+    .kpi .value{ font-size:20px; font-weight:800; }
+    .pos{ color: var(--accent); }
+    .neg{ color: var(--danger); }
+    .note{ font-size:12px; color:var(--muted); margin-top:10px; }
+    .footer{ margin-top: 18px; font-size:12px; color: var(--muted); }
+    @media (max-width: 840px){
+      .grid{ grid-template-columns: 1fr; }
+      .col-6, .col-4, .col-12{ grid-column: span 1; }
+      .kpi{ grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>IBKR 港股交易费用与净收益计算器</h1>
+      <div class="sub">内置常见费率（可调整）。<span class="pill">示例已填：买 9.52 / 卖 9.70 / 20,000 股</span></div>
+
+      <div class="grid">
+        <div class="col-6">
+          <label>买入价（HKD/股）</label>
+          <input id="buyPrice" type="number" step="0.0001" value="9.52" />
+        </div>
+        <div class="col-6">
+          <label>卖出价（HKD/股）</label>
+          <input id="sellPrice" type="number" step="0.0001" value="9.7" />
+        </div>
+        <div class="col-6">
+          <label>股数（股）</label>
+          <input id="shares" type="number" step="1" value="20000" />
+        </div>
+        <div class="col-6">
+          <label>佣金率（每边，%）<span class="muted">（Tiered 常用 0.05）</span></label>
+          <input id="commissionRate" type="number" step="0.001" value="0.05" />
+        </div>
+        <div class="col-6">
+          <label>单边最低佣金（HKD）</label>
+          <input id="minCommission" type="number" step="0.01" value="18" />
+        </div>
+        <div class="col-6">
+          <label>印花税（% / 向上取整至 1 HKD）</label>
+          <input id="stampDuty" type="number" step="0.01" value="0.1" />
+        </div>
+        <div class="col-4">
+          <label>交易所费用（%）</label>
+          <input id="exchangeFee" type="number" step="0.0001" value="0.00565" />
+        </div>
+        <div class="col-4">
+          <label>清算费用（% / 最低 2 HKD / 边）</label>
+          <input id="clearingFee" type="number" step="0.0001" value="0.002" />
+        </div>
+        <div class="col-4">
+          <label>SFC 交易征费（%）</label>
+          <input id="sfcFee" type="number" step="0.0001" value="0.0027" />
+        </div>
+        <div class="col-4">
+          <label>FRC 征费（%）</label>
+          <input id="frcFee" type="number" step="0.00001" value="0.00015" />
+        </div>
+        <div class="col-8 row">
+          <button class="btn btn-primary" onclick="compute()">计算</button>
+          <button class="btn btn-ghost" onclick="presetExample()">填入示例</button>
+          <button class="btn btn-ghost" onclick="resetAll()">重置</button>
+        </div>
+      </div>
+
+      <div class="kpi" id="kpis" style="display:none;">
+        <div class="box"><div class="label">买入总成本（含费）</div><div class="value" id="kpiCost">—</div></div>
+        <div class="box"><div class="label">卖出总收入（扣费）</div><div class="value" id="kpiRevenue">—</div></div>
+        <div class="box"><div class="label">净收益</div><div class="value" id="kpiProfit">—</div></div>
+        <div class="box"><div class="label">投资回报率（ROI）</div><div class="value" id="kpiRoi">—</div></div>
+      </div>
+
+      <div id="results" style="margin-top: 16px; display:none;">
+        <h3>费用拆分（买入）</h3>
+        <table id="buyTable"></table>
+        <h3 style="margin-top: 18px;">费用拆分（卖出）</h3>
+        <table id="sellTable"></table>
+      </div>
+
+      <div class="note">提示：费率会随时间调整，实际以 IBKR 与港交所 / 监管机构最新公布为准。本工具仅供估算与学习用途。</div>
+
+      <div class="footer">Made for JJY · 计算逻辑：佣金 = max(金额×佣金率, 最低佣金)；印花税 = ceil(金额×税率)；清算费 = max(金额×费率, 2)。其余均为按比例计费。</div>
+    </div>
+  </div>
+
+<script>
+  function num(v){ return Number(v) || 0; }
+  function hkd(n){ return "HK$" + n.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+  function calcSide(amount, rates){
+    const { commissionRate, minCommission, stampDuty, exchangeFee, clearingFee, sfcFee, frcFee } = rates;
+
+    const commission = Math.max(amount * (commissionRate/100), minCommission);
+    const stamp = Math.ceil(amount * (stampDuty/100));
+    const exFee = amount * (exchangeFee/100);
+    const clearFeeRaw = amount * (clearingFee/100);
+    const clearFee = Math.max(clearFeeRaw, 2);
+    const sfc = amount * (sfcFee/100);
+    const frc = amount * (frcFee/100);
+
+    const total = commission + stamp + exFee + clearFee + sfc + frc;
+    return { commission, stamp, exFee, clearFee, sfc, frc, total };
+  }
+
+  function compute(){
+    const buyPrice = num(document.getElementById('buyPrice').value);
+    const sellPrice = num(document.getElementById('sellPrice').value);
+    const shares = Math.floor(num(document.getElementById('shares').value));
+
+    const rates = {
+      commissionRate: num(document.getElementById('commissionRate').value),
+      minCommission: num(document.getElementById('minCommission').value),
+      stampDuty: num(document.getElementById('stampDuty').value),
+      exchangeFee: num(document.getElementById('exchangeFee').value),
+      clearingFee: num(document.getElementById('clearingFee').value),
+      sfcFee: num(document.getElementById('sfcFee').value),
+      frcFee: num(document.getElementById('frcFee').value),
+    };
+
+    if(buyPrice<=0 || sellPrice<=0 || shares<=0){
+      alert('请填写正确的价格与股数');
+      return;
+    }
+
+    const buyAmount = buyPrice * shares;
+    const sellAmount = sellPrice * shares;
+
+    const buyFees = calcSide(buyAmount, rates);
+    const sellFees = calcSide(sellAmount, rates);
+
+    const totalCost = buyAmount + buyFees.total;
+    const totalRevenue = sellAmount - sellFees.total;
+    const net = totalRevenue - totalCost;
+    const roi = totalCost>0 ? (net/totalCost*100) : 0;
+
+    // KPI
+    document.getElementById('kpis').style.display = 'grid';
+    document.getElementById('kpiCost').textContent = hkd(totalCost);
+    document.getElementById('kpiRevenue').textContent = hkd(totalRevenue);
+    document.getElementById('kpiProfit').textContent = (net>=0? '+':'') + hkd(net).replace('HK$','HK$');
+    document.getElementById('kpiProfit').className = 'value ' + (net>=0? 'pos':'neg');
+    document.getElementById('kpiRoi').textContent = (net>=0? '+':'') + roi.toFixed(2) + '%';
+    document.getElementById('kpiRoi').className = 'value ' + (net>=0? 'pos':'neg');
+
+    // Tables
+    const buyTable = document.getElementById('buyTable');
+    const sellTable = document.getElementById('sellTable');
+
+    buyTable.innerHTML = tableHtml(buyAmount, buyFees);
+    sellTable.innerHTML = tableHtml(sellAmount, sellFees);
+
+    document.getElementById('results').style.display = 'block';
+  }
+
+  function tableHtml(amount, f){
+    return `
+      <thead>
+        <tr><th>费用项</th><th>金额（HKD）</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>交易金额</td><td>${hkd(amount)}</td></tr>
+        <tr><td>佣金</td><td>${hkd(f.commission)}</td></tr>
+        <tr><td>印花税</td><td>${hkd(f.stamp)}</td></tr>
+        <tr><td>交易所费用</td><td>${hkd(f.exFee)}</td></tr>
+        <tr><td>清算费用</td><td>${hkd(f.clearFee)}</td></tr>
+        <tr><td>SFC 征费</td><td>${hkd(f.sfc)}</td></tr>
+        <tr><td>FRC 征费</td><td>${hkd(f.frc)}</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td>费用合计</td><td>${hkd(f.total)}</td></tr>
+      </tfoot>
+    `;
+  }
+
+  function presetExample(){
+    document.getElementById('buyPrice').value = 9.52;
+    document.getElementById('sellPrice').value = 9.7;
+    document.getElementById('shares').value = 20000;
+    document.getElementById('commissionRate').value = 0.05;
+    document.getElementById('minCommission').value = 18;
+    document.getElementById('stampDuty').value = 0.1;
+    document.getElementById('exchangeFee').value = 0.00565;
+    document.getElementById('clearingFee').value = 0.002;
+    document.getElementById('sfcFee').value = 0.0027;
+    document.getElementById('frcFee').value = 0.00015;
+  }
+
+  function resetAll(){
+    document.querySelectorAll('input').forEach(i=> i.value='');
+    document.getElementById('kpis').style.display='none';
+    document.getElementById('results').style.display='none';
+  }
+
+  // Auto-run example once on load for convenience
+  window.addEventListener('DOMContentLoaded', ()=>{ presetExample(); compute(); });
+</script>
+</body>
+</html>

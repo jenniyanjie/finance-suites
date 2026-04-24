@@ -186,6 +186,65 @@ export interface MortgageResult {
   }>;
 }
 
+// 模块10: DCA定投模拟类型
+export interface DCAInput {
+  /** 每期投入金额 */
+  monthlyAmount: number;
+  /** 初始价格（第一期买入价） */
+  initialPrice: number;
+  /** 终止价格（最后期末价格） */
+  finalPrice: number;
+  /** 投资期数（月） */
+  periods: number;
+  /** 价格模式：'linear'=线性增长, 'volatile'=模拟波动, 'custom'=自定义序列 */
+  priceMode: 'linear' | 'volatile';
+  /** 年化波动率（仅 volatile 模式，百分比，默认20） */
+  volatility?: number;
+}
+
+export interface DCAPeriodDetail {
+  /** 期数 */
+  period: number;
+  /** 本期买入价 */
+  price: number;
+  /** 本期买入份数 */
+  sharesBought: number;
+  /** 累计持仓份数 */
+  totalShares: number;
+  /** 本期累计投入 */
+  totalInvested: number;
+  /** 本期末持仓市值 */
+  portfolioValue: number;
+  /** 本期末浮动盈亏 */
+  unrealizedPL: number;
+  /** 累计平均成本 */
+  avgCost: number;
+}
+
+export interface DCAResult {
+  /** 总投入金额 */
+  totalInvested: number;
+  /** 终期市值 */
+  finalValue: number;
+  /** 净盈亏 */
+  profit: number;
+  /** 总回报率 (%) */
+  totalReturn: number;
+  /** 平均持仓成本 */
+  avgCost: number;
+  /** 总持仓份数 */
+  totalShares: number;
+  /** 一次性投入对比（同等总金额在第一期买入）*/
+  lumpSum: {
+    shares: number;
+    finalValue: number;
+    profit: number;
+    totalReturn: number;
+  };
+  /** 每期明细 */
+  periodDetails: DCAPeriodDetail[];
+}
+
 // 通用错误类型
 export interface CalculationError {
   code: string;
@@ -231,6 +290,64 @@ export interface RealEstateResult {
   totalProfit: number;
   /** 年回报率 ROE (百分比) */
   roe: number;
+}
+
+// 模块9: 港股交易费用计算类型
+export interface TradingCostInput {
+  /** 买入价 (HKD/股) */
+  buyPrice: number;
+  /** 卖出价 (HKD/股) */
+  sellPrice: number;
+  /** 股数 */
+  shares: number;
+  /** 佣金率 (每边，百分比) */
+  commissionRate: number;
+  /** 单边最低佣金 (HKD) */
+  minCommission: number;
+  /** 印花税 (百分比) */
+  stampDuty: number;
+  /** 交易所费用 (百分比) */
+  exchangeFee: number;
+  /** 清算费用 (百分比，最低 2 HKD/边) */
+  clearingFee: number;
+  /** SFC 交易征费 (百分比) */
+  sfcFee: number;
+  /** FRC 征费 (百分比) */
+  frcFee: number;
+}
+
+export interface TradingCostBreakdown {
+  /** 交易金额 */
+  amount: number;
+  /** 佣金 */
+  commission: number;
+  /** 印花税 */
+  stamp: number;
+  /** 交易所费用 */
+  exchangeFee: number;
+  /** 清算费用 */
+  clearingFee: number;
+  /** SFC 征费 */
+  sfcFee: number;
+  /** FRC 征费 */
+  frcFee: number;
+  /** 费用合计 */
+  totalFees: number;
+}
+
+export interface TradingCostResult {
+  /** 买入费用明细 */
+  buyBreakdown: TradingCostBreakdown;
+  /** 卖出费用明细 */
+  sellBreakdown: TradingCostBreakdown;
+  /** 买入总成本（含费） */
+  totalCost: number;
+  /** 卖出总收入（扣费） */
+  totalRevenue: number;
+  /** 净收益 */
+  netProfit: number;
+  /** 投资回报率 (百分比) */
+  roi: number;
 }
 
 // 计算器配置类型

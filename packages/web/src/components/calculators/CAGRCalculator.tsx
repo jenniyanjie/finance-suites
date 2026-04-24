@@ -12,6 +12,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, TrendingUp, BarChart3, Share2, Target, Clock } from "lucide-react";
 import { calculateCAGR, calculateTargetPrice, calculateRequiredTime } from "@finance-suites/shared";
 import type { CAGRInput, CAGRResult } from "@finance-suites/shared";
+import { useCalculationHistory } from "@/lib/useCalculationHistory";
+import HistoryPanel from "@/components/ui/HistoryPanel";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
 
 // 表单验证模式
 const cagrSchema = z.object({
@@ -42,6 +55,8 @@ export default function CAGRCalculator() {
   const [timeResult, setTimeResult] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [calculationMode, setCalculationMode] = useState<"cagr" | "target" | "time">("cagr");
+
+  const { history, addRecord, removeRecord, clearHistory } = useCalculationHistory<CAGRResult>('cagr');
 
   const cagrForm = useForm<CAGRFormData>({
     resolver: zodResolver(cagrSchema),
@@ -75,6 +90,17 @@ export default function CAGRCalculator() {
   const cagrSell = cagrForm.watch("sell");
   const cagrYears = cagrForm.watch("years");
 
+  // 生成CAGR价格轨迹图表数据（仅在 CAGR 模式且数据有效时）
+  const cagrChartData = (() => {
+    if (!cagrBuy || !cagrSell || !cagrYears || cagrYears <= 0 || !cagrResult) return [];
+    const cagr = cagrResult.cagr / 100;
+    const totalYears = Math.min(Math.ceil(cagrYears * 1.5), 30); // 延伸至1.5倍以显示趋势
+    return Array.from({ length: totalYears + 1 }, (_, i) => ({
+      year: i,
+      价格: Math.round(cagrBuy * Math.pow(1 + cagr, i) * 100) / 100,
+    }));
+  })();
+
   // 目标价格表单字段
   const targetCurrentPrice = targetForm.watch("currentPrice");
   const targetCAGR = targetForm.watch("targetCAGR");
@@ -102,6 +128,20 @@ export default function CAGRCalculator() {
       }
     }
   }, [cagrBuy, cagrSell, cagrYears, calculationMode]);
+
+  // 防抖保存历史（用户停止输入1秒后才记录）
+  useEffect(() => {
+    if (calculationMode !== "cagr" || !cagrResult) return;
+    const timer = setTimeout(() => {
+      addRecord({
+        inputSummary: `买入¥${cagrBuy} → 卖出¥${cagrSell}，持有${cagrYears}年`,
+        resultSummary: `CAGR ${cagrResult.cagr.toFixed(2)}%，总收益 ${cagrResult.total >= 0 ? "+" : ""}${cagrResult.total.toFixed(2)}%`,
+        inputs: { buy: cagrBuy, sell: cagrSell, years: cagrYears },
+        result: cagrResult,
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [cagrBuy, cagrSell, cagrYears, cagrResult, calculationMode]);
 
   // 实时计算目标价格
   useEffect(() => {
@@ -139,9 +179,17 @@ export default function CAGRCalculator() {
       url.searchParams.set("sell", cagrSell.toString());
       url.searchParams.set("years", cagrYears.toString());
     }
-    
+
     navigator.clipboard.writeText(url.toString());
     alert("链接已复制到剪贴板！");
+  };
+
+  const handleSelectHistory = (record: import("@/lib/useCalculationHistory").HistoryRecord<CAGRResult>) => {
+    const inputs = record.inputs as { buy: number; sell: number; years: number };
+    cagrForm.setValue("buy", inputs.buy);
+    cagrForm.setValue("sell", inputs.sell);
+    cagrForm.setValue("years", inputs.years);
+    setCalculationMode("cagr");
   };
 
   return (
@@ -263,7 +311,7 @@ export default function CAGRCalculator() {
                           <div>买入价: ¥{cagrBuy?.toLocaleString("zh-CN")}</div>
                           <div>卖出价: ¥{cagrSell?.toLocaleString("zh-CN")}</div>
                           <div>持有时间: {cagrYears}年</div>
-                          <div>投资倍数: {(cagrSell / cagrBuy).toFixed(2)}倍</div>
+                          <div>投资倍数: {cagrBuy ? (cagrSell / cagrBuy).toFixed(2) : '–'}倍</div>
                         </div>
                       </div>
 
@@ -351,7 +399,7 @@ export default function CAGRCalculator() {
                           <div>当前价格: ¥{targetCurrentPrice?.toLocaleString("zh-CN")}</div>
                           <div>目标年化收益率: {targetCAGR}%</div>
                           <div>投资年限: {targetYears}年</div>
-                          <div>预期涨幅: {((targetPriceResult / targetCurrentPrice - 1) * 100).toFixed(2)}%</div>
+                          <div>预期涨幅: {targetCurrentPrice ? ((targetPriceResult / targetCurrentPrice - 1) * 100).toFixed(2) : '–'}%</div>
                         </div>
                       </div>
                     </div>
@@ -430,7 +478,7 @@ export default function CAGRCalculator() {
                           <div>买入价: ¥{timeBuyPrice?.toLocaleString("zh-CN")}</div>
                           <div>目标价格: ¥{timeSellPrice?.toLocaleString("zh-CN")}</div>
                           <div>期望年化收益率: {timeTargetCAGR}%</div>
-                          <div>总涨幅: {((timeSellPrice / timeBuyPrice - 1) * 100).toFixed(2)}%</div>
+                          <div>总涨幅: {timeBuyPrice ? ((timeSellPrice / timeBuyPrice - 1) * 100).toFixed(2) : '–'}%</div>
                         </div>
                       </div>
                     </div>
@@ -440,7 +488,65 @@ export default function CAGRCalculator() {
             </div>
           </TabsContent>
         </div>
+
+        {/* CAGR 价格轨迹图 */}
+        {calculationMode === "cagr" && cagrChartData.length > 1 && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                CAGR 价格增长轨迹
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={cagrChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="year" tickFormatter={(v) => `${v}年`} tick={{ fontSize: 12 }} />
+                  <YAxis
+                    tickFormatter={(v) =>
+                      v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toFixed(0)
+                    }
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => [
+                      `¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`,
+                      "价格",
+                    ]}
+                    labelFormatter={(label) => `第 ${label} 年`}
+                  />
+                  <Legend />
+                  {/* 标记持有结束点 */}
+                  <ReferenceLine
+                    x={Math.round(cagrYears)}
+                    stroke="#ef4444"
+                    strokeDasharray="4 4"
+                    label={{ value: "卖出", position: "top", fontSize: 11, fill: "#ef4444" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="价格"
+                    stroke="#8b5cf6"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
       </Tabs>
+
+      {/* 计算历史 */}
+      <HistoryPanel
+        history={history}
+        onClear={clearHistory}
+        onRemove={removeRecord}
+        onSelect={handleSelectHistory}
+        title="CAGR 计算历史"
+      />
     </div>
   );
 }
